@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'">
+  <title>Stadia Bridge</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div class="ambient ambient-a"></div>
+  <div class="ambient ambient-b"></div>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-lockup">
+        <div class="brand-mark" aria-hidden="true">S</div>
+        <div>
+          <h1>Stadia Bridge</h1>
+          <p>Codex controller console</p>
+        </div>
+      </div>
+      <div class="top-actions">
+        <div class="runtime-chip"><span></span> LOCAL · WEBVIEW2</div>
+        <div class="status-pill" id="status-pill" data-tone="warning">
+          <span class="status-dot"></span>
+          <span id="status-text">正在准备</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="controller-card glass" id="controller-card">
+        <div class="card-heading">
+          <div>
+            <span class="eyebrow">CONTROLLER</span>
+            <h2>实时按键映射</h2>
+          </div>
+          <span class="live-badge"><i></i> LIVE</span>
+        </div>
+
+        <div class="controller-stage">
+          <div class="stage-aura" aria-hidden="true"><i></i><i></i><i></i></div>
+          <svg class="controller-map" viewBox="0 0 900 620" role="img" aria-label="Stadia 手柄交互映射">
+            <defs>
+              <filter id="edge-blur" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="16"/></filter>
+              <mask id="controller-feather" maskUnits="userSpaceOnUse" x="-54" y="0" width="1008" height="580">
+                <rect x="-26" y="18" width="952" height="542" rx="50" fill="white" filter="url(#edge-blur)"/>
+              </mask>
+              <filter id="soft-glow" x="-80%" y="-80%" width="260%" height="260%">
+                <feGaussianBlur stdDeviation="8" result="blur"/>
+                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+              </filter>
+            </defs>
+
+            <image href="controller-integrated-v3.png" x="-40" y="10"
+                   width="980" height="551.6" mask="url(#controller-feather)" preserveAspectRatio="none"/>
+
+            <g class="hotspots" aria-label="可交互按键">
+              <rect class="hotspot shoulder-hotspot" tabindex="0" data-key="LeftTrigger" x="158" y="80" width="132" height="37" rx="17"/>
+              <rect class="hotspot shoulder-hotspot" tabindex="0" data-key="LeftShoulder" x="152" y="118" width="136" height="43" rx="18"/>
+              <rect class="hotspot shoulder-hotspot" tabindex="0" data-key="RightTrigger" x="610" y="80" width="132" height="37" rx="17"/>
+              <rect class="hotspot shoulder-hotspot" tabindex="0" data-key="RightShoulder" x="612" y="118" width="136" height="43" rx="18"/>
+
+              <circle class="hotspot" tabindex="0" data-key="DpadUp" cx="215" cy="235" r="20"/>
+              <circle class="hotspot" tabindex="0" data-key="DpadDown" cx="215" cy="289" r="20"/>
+              <circle class="hotspot" tabindex="0" data-key="DpadLeft" cx="188" cy="262" r="20"/>
+              <circle class="hotspot" tabindex="0" data-key="DpadRight" cx="242" cy="262" r="20"/>
+
+              <circle class="hotspot" tabindex="0" data-key="View" cx="347" cy="215" r="20"/>
+              <circle class="hotspot" tabindex="0" data-key="StadiaAssistant" cx="379" cy="271" r="20"/>
+              <circle class="hotspot" tabindex="0" data-key="Menu" cx="534" cy="215" r="20"/>
+              <circle class="hotspot" tabindex="0" data-key="StadiaCapture" cx="514" cy="271" r="20"/>
+
+              <circle class="hotspot" tabindex="0" data-key="North" cx="687" cy="224" r="28"/>
+              <circle class="hotspot" tabindex="0" data-key="West" cx="625" cy="268" r="28"/>
+              <circle class="hotspot" tabindex="0" data-key="East" cx="734" cy="268" r="28"/>
+              <circle class="hotspot" tabindex="0" data-key="South" cx="678" cy="312" r="28"/>
+
+              <circle class="hotspot" tabindex="0" data-key="LeftStickUp" cx="312" cy="330" r="21"/>
+              <circle class="hotspot" tabindex="0" data-key="LeftStickDown" cx="312" cy="394" r="21"/>
+              <circle class="hotspot" tabindex="0" data-key="LeftStickLeft" cx="280" cy="362" r="21"/>
+              <circle class="hotspot" tabindex="0" data-key="LeftStickRight" cx="344" cy="362" r="21"/>
+              <circle class="hotspot" tabindex="0" data-key="LeftStick" cx="312" cy="362" r="27"/>
+
+              <circle class="hotspot" tabindex="0" data-key="Guide" cx="446" cy="353" r="32"/>
+
+              <circle class="hotspot" tabindex="0" data-key="RightStickUp" cx="575" cy="330" r="21"/>
+              <circle class="hotspot" tabindex="0" data-key="RightStickDown" cx="575" cy="394" r="21"/>
+              <circle class="hotspot" tabindex="0" data-key="RightStickLeft" cx="543" cy="362" r="21"/>
+              <circle class="hotspot" tabindex="0" data-key="RightStickRight" cx="607" cy="362" r="21"/>
+              <circle class="hotspot" tabindex="0" data-key="RightStick" cx="575" cy="362" r="27"/>
+            </g>
+          </svg>
+        </div>
+
+        <div class="interaction-hint">
+          <span class="mouse-icon"></span>
+          悬停按键查看映射；摇杆与十字键方向可独立识别
+        </div>
+      </section>
+
+      <aside class="detail-card glass">
+        <div class="detail-accent"></div>
+        <span class="eyebrow">CURRENT MAPPING</span>
+        <div class="key-orbit"><span id="key-symbol">?</span></div>
+        <h2 id="key-title">选择一个按键</h2>
+        <p class="function-text" id="function-text">将鼠标移到手柄上的按键，查看对应的 Codex 功能。</p>
+
+        <div class="mapping-route" aria-label="映射路径">
+          <span>GAMEPAD</span><i></i><b>→</b><i></i><span>CODEX</span>
+        </div>
+
+        <div class="shortcut-block">
+          <span>触发操作</span>
+          <code id="shortcut-text">等待选择</code>
+        </div>
+
+        <div class="context-config" id="context-config" hidden>
+          <div class="mapping-config-panel" id="assistant-config" hidden>
+            <div class="config-heading">
+              <span>ASSISTANT MODE</span>
+              <strong>语音方式</strong>
+            </div>
+            <div class="mode-switch" role="group" aria-label="Assistant 语音模式">
+              <button type="button" data-assistant-mode="typeless">Typeless</button>
+              <button type="button" data-assistant-mode="codex">Codex 听写</button>
+            </div>
+            <p id="assistant-mode-hint">按一下开始，再按一下结束并插入识别结果。</p>
+          </div>
+
+          <div class="mapping-config-panel" id="plan-config" hidden>
+            <div class="config-heading">
+              <span>R2 SHORTCUT</span>
+              <strong>切换计划模式</strong>
+            </div>
+            <div class="shortcut-editor">
+              <input id="plan-shortcut-input" type="text" maxlength="64" spellcheck="false"
+                     autocomplete="off" placeholder="例如 Ctrl+Shift+P" aria-label="计划模式快捷键">
+              <button type="button" id="save-plan-shortcut">保存</button>
+            </div>
+            <p id="plan-shortcut-hint">尚未配置；留空保存可禁用 R2 输出。</p>
+          </div>
+        </div>
+
+        <div class="detail-divider"></div>
+        <div class="meta-grid">
+          <div class="meta-item">
+            <span>配置</span>
+            <strong>controller-codex-profile.json</strong>
+          </div>
+          <div class="meta-item">
+            <span>交互热区</span>
+            <strong>27</strong>
+          </div>
+          <div class="meta-item">
+            <span>设备协议</span>
+            <strong>SDL / HID</strong>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="actionbar glass">
+      <div class="device-list">
+        <span class="device-label"><i class="device-dot"></i> Stadia</span>
+        <span class="device-label">Xbox</span>
+        <span class="device-label">Switch</span>
+      </div>
+      <div class="actions">
+        <button class="button button-map" id="mapping-preview-button" aria-expanded="false" aria-controls="mapping-preview">
+          <span class="map-grid-icon" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+          <span id="mapping-preview-label">全部映射</span>
+        </button>
+        <button class="button button-primary" id="start-button"><span class="play-icon"></span>启动桥接</button>
+        <button class="button button-secondary" id="stop-button"><span class="stop-icon"></span>停止</button>
+        <button class="button button-ghost" id="export-button">导出映射图</button>
+        <button class="icon-button" id="tray-button" title="隐藏到系统托盘" aria-label="隐藏到系统托盘">—</button>
+      </div>
+    </footer>
+  </div>
+
+  <section class="mapping-preview" id="mapping-preview" aria-hidden="true">
+    <button class="mapping-preview-backdrop" id="mapping-preview-backdrop" tabindex="-1" aria-label="关闭全部映射预览"></button>
+    <div class="mapping-preview-panel glass" role="dialog" aria-modal="true" aria-labelledby="mapping-preview-title">
+      <div class="mapping-preview-head">
+        <div>
+          <span class="eyebrow">GLOBAL OVERVIEW</span>
+          <h2 id="mapping-preview-title">完整按键映射</h2>
+          <p>所有手柄输入与 Codex 操作一览</p>
+        </div>
+        <div class="preview-summary">
+          <strong id="mapping-preview-count">27</strong>
+          <span>交互热区</span>
+        </div>
+      </div>
+      <div class="mapping-preview-content" id="mapping-preview-content"></div>
+      <div class="mapping-preview-foot">
+        <span><i></i> 列表与当前配置实时同步</span>
+        <button class="preview-close-button" id="mapping-preview-close">关闭预览</button>
+      </div>
+    </div>
+  </section>
+  <script src="app.js"></script>
+</body>
+</html>

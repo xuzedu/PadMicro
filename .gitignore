@@ -1,0 +1,7 @@
+bin/
+obj/
+Ui/bin/
+Ui/obj/
+publish/
+*.user
+*.log

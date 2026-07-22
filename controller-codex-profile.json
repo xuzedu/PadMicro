@@ -1,0 +1,35 @@
+{
+  "buttons": {
+    "South": "Send",
+    "East": "Cancel",
+    "North": "ForkChat",
+    "West": "SmartDelete",
+    "StadiaCapture": "ChooseProject",
+    "StadiaAssistant": "TypelessToggle",
+    "View": "PreviousChat",
+    "Guide": "NewChat",
+    "Menu": "NextChat",
+    "LeftShoulder": "PreviousChat",
+    "RightShoulder": "NextChat",
+    "LeftTrigger": "CycleMode",
+    "RightTrigger": "CyclePlanMode",
+    "RightStick": "Send",
+    "DpadUp": "OpenTerminal",
+    "DpadDown": "ToggleSidePanel",
+    "DpadLeft": "ToggleSidebar",
+    "DpadRight": "OpenBrowser"
+  },
+  "gestures": {
+    "LeftStickUp": "ScrollUp",
+    "LeftStickDown": "ScrollDown",
+    "LeftStickLeft": "ThinkingDown",
+    "LeftStickRight": "ThinkingUp",
+    "RightStickUp": "ArrowUp",
+    "RightStickDown": "ArrowDown",
+    "RightStickLeft": "ArrowLeft",
+    "RightStickRight": "ArrowRight"
+  },
+  "customShortcuts": {
+    "CyclePlanMode": ""
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "buttons": {
+    "A": "Send",
+    "B": "Cancel",
+    "X": "DictationHold",
+    "Y": "CommandMenu",
+    "Back": "PreviousChat",
+    "Start": "NextChat",
+    "LeftStick": "Review",
+    "RightStick": "QuickChat",
+    "LeftShoulder": "Back",
+    "RightShoulder": "Forward",
+    "DpadUp": "ToggleBottomPanel",
+    "DpadDown": "ToggleSidebar",
+    "DpadLeft": "PreviousChat",
+    "DpadRight": "NextChat"
+  }
+}
