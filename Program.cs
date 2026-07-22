@@ -66,18 +66,18 @@ internal static class Program
         using var serviceInstance = AcquireServiceInstance(checkOnly || diagnose, out var acquired);
         if (!acquired)
         {
-            Console.WriteLine("StadiaCodexBridge 服务已在运行，本次启动已忽略。");
+            Console.WriteLine("PadMicro 服务已在运行，本次启动已忽略。");
             return 0;
         }
         var profilePath = args.FirstOrDefault(a => a.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-                          ?? Path.Combine(baseDir, "controller-codex-profile.json");
+                          ?? Path.Combine(baseDir, "controller-padmicro-profile.json");
         var profile = LoadProfile(profilePath);
 
-        var sdlPath = Environment.GetEnvironmentVariable("STADIA_CODEX_SDL2") ?? DefaultSdlPath;
+        var sdlPath = Environment.GetEnvironmentVariable("PADMICRO_SDL2") ?? DefaultSdlPath;
         if (!File.Exists(sdlPath))
         {
             Console.Error.WriteLine($"找不到 SDL2：{sdlPath}");
-            Console.Error.WriteLine("请安装 AntiMicroX，或设置 STADIA_CODEX_SDL2 环境变量。");
+            Console.Error.WriteLine("请安装 AntiMicroX，或设置 PADMICRO_SDL2 环境变量。");
             return 2;
         }
 
@@ -124,7 +124,7 @@ internal static class Program
             using var quit = new CancellationTokenSource();
             Console.CancelKeyPress += (_, e) => { e.Cancel = true; quit.Cancel(); };
 
-            Console.WriteLine("Controller → Codex 映射已启动。按 Ctrl+C 退出。");
+            Console.WriteLine("PadMicro 映射服务已启动。按 Ctrl+C 退出。");
             Console.WriteLine("仅在 Codex/ChatGPT 窗口位于前台时发送快捷键。\n");
             PrintMappings(profile);
             Run(controller, profile, quit.Token);
@@ -145,7 +145,7 @@ internal static class Program
             return null;
         }
 
-        return new Mutex(true, @"Local\StadiaCodexBridge.Service.SingleInstance.v1", out acquired);
+        return new Mutex(true, @"Local\PadMicro.Service.SingleInstance.v1", out acquired);
     }
 
     private static Profile LoadProfile(string path)

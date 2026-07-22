@@ -1,6 +1,6 @@
-# Controller Codex Bridge
+# PadMicro
 
-把 Stadia、Xbox 和 Switch 等 SDL 标准游戏手柄转换为 Codex/ChatGPT Windows 桌面端控制器。按键使用位置语义，因此不同品牌的标签可以不同：`South` 永远指手柄最下方的面键。
+PadMicro 把 Stadia、Xbox 和 Switch 等 SDL 标准游戏手柄转换为 Codex/ChatGPT Windows 桌面端控制器。按键使用位置语义，因此不同品牌的标签可以不同：`South` 永远指手柄最下方的面键。
 
 默认布局参考 [OpenMicro](https://github.com/stephenleo/OpenMicro) 的控制器抽象和工作流设计。OpenMicro 当前的桌面端驱动是 macOS 实现；本程序是面向 Windows 的独立实现。
 
@@ -46,8 +46,8 @@ Y 通过 Codex 官方 `/fork` 命令复制当前对话到新任务。Stadia Capt
 
 ## 使用和配置
 
-双击 `Start-ControllerCodexBridge.cmd` 打开 `publish` 中的可视化控制台。窗口会自动启动后台手柄桥接；悬停任意按键可查看功能与快捷键，“全部映射”可切换全局预览。关闭主窗口后程序保留在系统托盘，右键托盘图标选择“退出服务”才会完全停止。必须由当前登录的 Windows 用户启动，不能从服务或远程诊断会话启动。
+双击 `Start-PadMicro-UI.cmd` 打开 `publish` 中的可视化控制台。窗口会自动启动后台手柄桥接；悬停任意按键可查看功能与快捷键，“全部映射”可切换全局预览。关闭主窗口后程序保留在系统托盘，右键托盘图标选择“退出服务”才会完全停止。必须由当前登录的 Windows 用户启动，不能从服务或远程诊断会话启动。
 
-编辑 `controller-codex-profile.json` 可以修改按钮、摇杆手势和工作流提示。程序依赖 AntiMicroX 安装目录所附带的 SDL2 运行库。
+编辑 `controller-padmicro-profile.json` 可以修改按钮、摇杆手势和工作流提示。程序依赖 AntiMicroX 安装目录所附带的 SDL2 运行库。
 
-故障排查时双击 `Diagnose-Controller.cmd`，或运行 `publish\StadiaCodexBridge.exe --check controller-codex-profile.json`。
+故障排查时双击 `Diagnose-Controller.cmd`，或运行 `publish\PadMicro.exe --check controller-padmicro-profile.json`。

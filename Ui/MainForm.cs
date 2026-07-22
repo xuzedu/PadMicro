@@ -8,7 +8,7 @@ using System.Text.Json.Nodes;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
-namespace StadiaCodexBridge.UI;
+namespace PadMicro.UI;
 
 internal sealed class MainForm : Form
 {
@@ -33,7 +33,7 @@ internal sealed class MainForm : Form
     public MainForm(bool autoStart)
     {
         this.autoStart = autoStart;
-        Text = "StadiaCodexBridge 控制台";
+        Text = "PadMicro 控制台";
         ClientSize = new Size(1220, 760);
         MinimumSize = new Size(1040, 680);
         BackColor = Color.FromArgb(8, 12, 21);
@@ -52,7 +52,7 @@ internal sealed class MainForm : Form
         };
         var title = new Label
         {
-            Text = "Stadia Bridge",
+            Text = "PadMicro",
             Font = new Font("Microsoft YaHei UI", 17f, FontStyle.Bold),
             ForeColor = Color.FromArgb(242, 246, 255),
             AutoSize = true,
@@ -214,7 +214,7 @@ internal sealed class MainForm : Form
         };
         var config = new Label
         {
-            Text = "controller-codex-\nprofile.json  ·  27 个交互热区",
+            Text = "controller-padmicro-\nprofile.json  ·  27 个交互热区",
             Font = new Font("Consolas", 9.5f),
             ForeColor = Color.FromArgb(162, 180, 207),
             AutoSize = false,
@@ -262,18 +262,18 @@ internal sealed class MainForm : Form
     private void StartBridge()
     {
         if (bridge is { HasExited: false }) return;
-        var existing = Process.GetProcessesByName("StadiaCodexBridge").FirstOrDefault();
+        var existing = Process.GetProcessesByName("PadMicro").FirstOrDefault();
         if (existing is not null)
         {
             TrackBridge(existing);
-            SetStatus("● 桥接已在运行", Color.FromArgb(77, 220, 175), "Stadia Bridge - 运行中");
+            SetStatus("● 桥接已在运行", Color.FromArgb(77, 220, 175), "PadMicro - 运行中");
             return;
         }
-        var executable = Path.Combine(AppContext.BaseDirectory, "StadiaCodexBridge.exe");
-        var profile = Path.Combine(AppContext.BaseDirectory, "controller-codex-profile.json");
+        var executable = Path.Combine(AppContext.BaseDirectory, "PadMicro.exe");
+        var profile = Path.Combine(AppContext.BaseDirectory, "controller-padmicro-profile.json");
         if (!File.Exists(executable) || !File.Exists(profile))
         {
-            SetStatus("● 缺少桥接程序或配置", Color.FromArgb(255, 104, 120), "Stadia Bridge - 配置缺失");
+            SetStatus("● 缺少桥接程序或配置", Color.FromArgb(255, 104, 120), "PadMicro - 配置缺失");
             return;
         }
         try
@@ -292,17 +292,17 @@ internal sealed class MainForm : Form
             TrackBridge(process);
             _ = process.StandardOutput.ReadToEndAsync();
             _ = process.StandardError.ReadToEndAsync();
-            SetStatus("● 手柄桥接运行中", Color.FromArgb(77, 220, 175), "Stadia Bridge - 运行中");
+            SetStatus("● 手柄桥接运行中", Color.FromArgb(77, 220, 175), "PadMicro - 运行中");
         }
         catch (Exception ex)
         {
-            SetStatus("● 启动失败：" + ex.Message, Color.FromArgb(255, 104, 120), "Stadia Bridge - 启动失败");
+            SetStatus("● 启动失败：" + ex.Message, Color.FromArgb(255, 104, 120), "PadMicro - 启动失败");
         }
     }
 
     private void StopBridge()
     {
-        foreach (var process in Process.GetProcessesByName("StadiaCodexBridge"))
+        foreach (var process in Process.GetProcessesByName("PadMicro"))
         {
             try
             {
@@ -317,7 +317,7 @@ internal sealed class MainForm : Form
         }
         try { bridge?.Dispose(); } catch { }
         bridge = null;
-        SetStatus("● 桥接已停止", Color.FromArgb(255, 194, 89), "Stadia Bridge - 已停止");
+        SetStatus("● 桥接已停止", Color.FromArgb(255, 194, 89), "PadMicro - 已停止");
     }
 
     private void ExportFromDialog()
@@ -325,12 +325,12 @@ internal sealed class MainForm : Form
         using var dialog = new SaveFileDialog
         {
             Filter = "PNG 图片|*.png",
-            FileName = "StadiaCodexBridge-Technical-Keymap.png",
+            FileName = "PadMicro-Technical-Keymap.png",
             InitialDirectory = AppContext.BaseDirectory
         };
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
         ExportImage(dialog.FileName);
-        SetStatus("● 映射图已导出", Color.FromArgb(113, 167, 255), "Stadia Bridge - 映射图已导出");
+        SetStatus("● 映射图已导出", Color.FromArgb(113, 167, 255), "PadMicro - 映射图已导出");
     }
 
     public void ExportImage(string path)
@@ -369,7 +369,7 @@ internal sealed class MainForm : Form
         trayIcon = new NotifyIcon
         {
             Icon = trayAppIcon,
-            Text = "Stadia Bridge - 正在准备",
+            Text = "PadMicro - 正在准备",
             ContextMenuStrip = trayMenu,
             Visible = true
         };
@@ -421,7 +421,7 @@ internal sealed class MainForm : Form
             try
             {
                 BeginInvoke(() => SetStatus("● 桥接已停止", Color.FromArgb(255, 194, 89),
-                    "Stadia Bridge - 已停止"));
+                    "PadMicro - 已停止"));
             }
             catch { }
         };
@@ -457,7 +457,7 @@ internal sealed class MainForm : Form
         {
             var userDataFolder = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "StadiaCodexBridge",
+                "PadMicro",
                 "WebView2");
             var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: userDataFolder);
             await view.EnsureCoreWebView2Async(environment);
@@ -487,7 +487,7 @@ internal sealed class MainForm : Form
             webView = null;
             SetNativeInterfaceVisible(true);
             SetStatus("● Web 界面不可用，已使用原生界面", Color.FromArgb(255, 194, 89),
-                "Stadia Bridge - 原生界面");
+                "PadMicro - 原生界面");
             Debug.WriteLine(ex);
         }
     }
@@ -583,7 +583,7 @@ internal sealed class MainForm : Form
         if (!IsSupportedShortcut(normalized))
         {
             SetStatus("● 快捷键格式无效", Color.FromArgb(255, 104, 120),
-                "Stadia Bridge - 快捷键格式无效");
+                "PadMicro - 快捷键格式无效");
             return;
         }
         UpdateProfile(root =>
@@ -598,7 +598,7 @@ internal sealed class MainForm : Form
     {
         try
         {
-            var path = Path.Combine(AppContext.BaseDirectory, "controller-codex-profile.json");
+            var path = Path.Combine(AppContext.BaseDirectory, "controller-padmicro-profile.json");
             var root = JsonNode.Parse(File.ReadAllText(path)) as JsonObject ?? new JsonObject();
             update(root);
             File.WriteAllText(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
@@ -612,14 +612,14 @@ internal sealed class MainForm : Form
             else
             {
                 SetStatus("● 配置已保存，桥接未启动", Color.FromArgb(255, 194, 89),
-                    "Stadia Bridge - 配置已保存");
+                    "PadMicro - 配置已保存");
             }
             SendWebState();
         }
         catch (Exception ex)
         {
             SetStatus("● 保存配置失败：" + ex.Message, Color.FromArgb(255, 104, 120),
-                "Stadia Bridge - 保存配置失败");
+                "PadMicro - 保存配置失败");
         }
     }
 
@@ -630,7 +630,7 @@ internal sealed class MainForm : Form
         try
         {
             using var document = JsonDocument.Parse(File.ReadAllText(
-                Path.Combine(AppContext.BaseDirectory, "controller-codex-profile.json")));
+                Path.Combine(AppContext.BaseDirectory, "controller-padmicro-profile.json")));
             var root = document.RootElement;
             if (root.TryGetProperty("buttons", out var buttons)
                 && buttons.TryGetProperty("StadiaAssistant", out var assistantAction)
@@ -683,7 +683,7 @@ internal sealed class MainForm : Form
         ShowInTaskbar = false;
         if (trayHintShown || trayIcon is null) return;
         trayHintShown = true;
-        trayIcon.ShowBalloonTip(1800, "Stadia Bridge 仍在运行",
+        trayIcon.ShowBalloonTip(1800, "PadMicro 仍在运行",
             "双击托盘图标可恢复窗口，右键可停止或退出服务。", ToolTipIcon.Info);
     }
 
@@ -743,7 +743,7 @@ internal sealed class MainForm : Form
 
     private static bool IsBridgeRunning()
     {
-        var processes = Process.GetProcessesByName("StadiaCodexBridge");
+        var processes = Process.GetProcessesByName("PadMicro");
         var running = processes.Any(process =>
         {
             try { return !process.HasExited; }
@@ -782,7 +782,7 @@ internal sealed class MainForm : Form
     {
         var actions = ActionCatalog.All;
         var result = new Dictionary<string, MappingInfo>(StringComparer.OrdinalIgnoreCase);
-        var profilePath = Path.Combine(AppContext.BaseDirectory, "controller-codex-profile.json");
+        var profilePath = Path.Combine(AppContext.BaseDirectory, "controller-padmicro-profile.json");
         if (!File.Exists(profilePath)) return result;
         try
         {
@@ -1017,7 +1017,7 @@ internal sealed class ControllerMapControl : Control
 
     private static Bitmap? LoadControllerArtwork()
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "StadiaCodexBridge-Keymap.png");
+        var path = Path.Combine(AppContext.BaseDirectory, "PadMicro-Keymap.png");
         if (!File.Exists(path)) return null;
         try
         {
@@ -1064,8 +1064,8 @@ internal sealed class ControllerMapControl : Control
         using var subtitleFont = new Font("Microsoft YaHei UI", 20f, FontStyle.Regular, GraphicsUnit.Pixel);
         using var titleBrush = new SolidBrush(Color.FromArgb(238, 244, 255));
         using var mutedBrush = new SolidBrush(Color.FromArgb(132, 153, 184));
-        g.DrawString("StadiaCodexBridge 按键映射", titleFont, titleBrush, 42, 30);
-        g.DrawString("按 Stadia 实物布局绘制 · 映射读取自 controller-codex-profile.json", subtitleFont, mutedBrush, 47, 108);
+        g.DrawString("PadMicro 按键映射", titleFont, titleBrush, 42, 30);
+        g.DrawString("按 Stadia 实物布局绘制 · 映射读取自 controller-padmicro-profile.json", subtitleFont, mutedBrush, 47, 108);
 
         var controllerState = g.Save();
         g.TranslateTransform(12, 182);

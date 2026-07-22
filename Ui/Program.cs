@@ -1,11 +1,11 @@
 using System.IO.Pipes;
 
-namespace StadiaCodexBridge.UI;
+namespace PadMicro.UI;
 
 internal static class Program
 {
-    internal const string ActivationPipeName = "StadiaCodexBridge.UI.Activate.v1";
-    private const string SingleInstanceMutexName = @"Local\StadiaCodexBridge.UI.SingleInstance.v1";
+    internal const string ActivationPipeName = "PadMicro.UI.Activate.v1";
+    private const string SingleInstanceMutexName = @"Local\PadMicro.UI.SingleInstance.v1";
 
     [STAThread]
     private static void Main(string[] args)

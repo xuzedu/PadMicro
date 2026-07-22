@@ -1,4 +1,4 @@
 @echo off
 cd /d "%~dp0"
-"%~dp0publish\StadiaCodexBridge.UI.exe"
+"%~dp0publish\PadMicro.UI.exe"
 if errorlevel 1 pause
