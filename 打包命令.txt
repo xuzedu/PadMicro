@@ -1,0 +1,4 @@
+dotnet publish .\PadMicro.csproj -c Release -r win-x64 --self-contained true -o .\publish
+dotnet publish .\Ui\PadMicro.UI.csproj -c Release -r win-x64 --self-contained true -o .\publish
+
+& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" ".\installer\PadMicro.iss"

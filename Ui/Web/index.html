@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'">
   <title>PadMicro</title>
+  <link rel="icon" type="image/png" href="padmicro-logo.png">
   <link rel="stylesheet" href="app.css">
 </head>
 <body>
@@ -13,7 +14,7 @@
   <div class="app-shell">
     <header class="topbar">
       <div class="brand-lockup">
-        <div class="brand-mark" aria-hidden="true">P</div>
+        <div class="brand-mark" aria-hidden="true"><img src="padmicro-logo.png" alt=""></div>
         <div>
           <h1>PadMicro</h1>
           <p>Codex controller console</p>
@@ -35,8 +36,20 @@
             <span class="eyebrow">CONTROLLER</span>
             <h2>实时按键映射</h2>
           </div>
-          <span class="live-badge"><i></i> LIVE</span>
+          <span class="live-badge" id="live-badge"><i></i> <span id="live-text">OFFLINE</span></span>
         </div>
+
+        <section class="connection-notice" id="connection-notice" data-tone="warning" hidden aria-live="polite">
+          <div class="connection-notice-icon" aria-hidden="true">
+            <span class="signal-wave"></span><span class="signal-wave"></span><i>!</i>
+          </div>
+          <div class="connection-notice-copy">
+            <span class="eyebrow">CONNECTION CHECK</span>
+            <h3 id="connection-notice-title">未检测到手柄</h3>
+            <p id="connection-notice-message">请检查手柄电源与蓝牙连接。</p>
+          </div>
+          <button type="button" class="connection-notice-action" id="connection-notice-action">重新检测</button>
+        </section>
 
         <div class="controller-stage">
           <div class="stage-aura" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -52,6 +65,7 @@
               </filter>
             </defs>
 
+            <g class="controller-layout" data-controller-family="stadia">
             <image href="controller-integrated-v3.png" x="-40" y="10"
                    width="980" height="551.6" mask="url(#controller-feather)" preserveAspectRatio="none"/>
 
@@ -90,6 +104,46 @@
               <circle class="hotspot" tabindex="0" data-key="RightStickRight" cx="607" cy="362" r="21"/>
               <circle class="hotspot" tabindex="0" data-key="RightStick" cx="575" cy="362" r="27"/>
             </g>
+            </g>
+
+            <g class="controller-layout xbox-layout" data-controller-family="xbox" transform="matrix(.75 0 0 .63 105 0)" hidden>
+              <image href="controller-xbox-series-white.png" x="18" y="0" width="864" height="620"
+                     preserveAspectRatio="xMidYMid meet"/>
+
+              <g class="hotspots" aria-label="Xbox Series 可交互按键">
+                <rect class="hotspot shoulder-hotspot" tabindex="0" data-key="LeftTrigger" x="125" y="28" width="142" height="40" rx="18"/>
+                <rect class="hotspot shoulder-hotspot" tabindex="0" data-key="LeftShoulder" x="105" y="70" width="162" height="42" rx="18"/>
+                <rect class="hotspot shoulder-hotspot" tabindex="0" data-key="RightTrigger" x="633" y="28" width="142" height="40" rx="18"/>
+                <rect class="hotspot shoulder-hotspot" tabindex="0" data-key="RightShoulder" x="633" y="70" width="162" height="42" rx="18"/>
+
+                <circle class="hotspot" tabindex="0" data-key="LeftStickUp" cx="246" cy="169" r="20"/>
+                <circle class="hotspot" tabindex="0" data-key="LeftStickDown" cx="246" cy="229" r="20"/>
+                <circle class="hotspot" tabindex="0" data-key="LeftStickLeft" cx="216" cy="199" r="20"/>
+                <circle class="hotspot" tabindex="0" data-key="LeftStickRight" cx="276" cy="199" r="20"/>
+                <circle class="hotspot" tabindex="0" data-key="LeftStick" cx="246" cy="199" r="27"/>
+
+                <circle class="hotspot" tabindex="0" data-key="DpadUp" cx="344" cy="295" r="20"/>
+                <circle class="hotspot" tabindex="0" data-key="DpadDown" cx="344" cy="355" r="20"/>
+                <circle class="hotspot" tabindex="0" data-key="DpadLeft" cx="314" cy="325" r="20"/>
+                <circle class="hotspot" tabindex="0" data-key="DpadRight" cx="374" cy="325" r="20"/>
+
+                <circle class="hotspot" tabindex="0" data-key="View" cx="387" cy="189" r="20"/>
+                <circle class="hotspot reserved-hotspot" tabindex="0" data-key="Guide" cx="449" cy="110" r="25"/>
+                <circle class="hotspot" tabindex="0" data-key="Menu" cx="505" cy="192" r="20"/>
+                <circle class="hotspot" tabindex="0" data-key="Misc1" cx="447" cy="236" r="20"/>
+
+                <circle class="hotspot" tabindex="0" data-key="North" cx="653" cy="142" r="27"/>
+                <circle class="hotspot" tabindex="0" data-key="West" cx="599" cy="198" r="27"/>
+                <circle class="hotspot" tabindex="0" data-key="East" cx="708" cy="197" r="27"/>
+                <circle class="hotspot" tabindex="0" data-key="South" cx="654" cy="250" r="27"/>
+
+                <circle class="hotspot" tabindex="0" data-key="RightStickUp" cx="550" cy="287" r="20"/>
+                <circle class="hotspot" tabindex="0" data-key="RightStickDown" cx="550" cy="347" r="20"/>
+                <circle class="hotspot" tabindex="0" data-key="RightStickLeft" cx="520" cy="317" r="20"/>
+                <circle class="hotspot" tabindex="0" data-key="RightStickRight" cx="580" cy="317" r="20"/>
+                <circle class="hotspot" tabindex="0" data-key="RightStick" cx="550" cy="317" r="27"/>
+              </g>
+            </g>
           </svg>
         </div>
 
@@ -112,59 +166,70 @@
 
         <div class="shortcut-block">
           <span>触发操作</span>
-          <code id="shortcut-text">等待选择</code>
+          <div class="shortcut-value-row">
+            <code id="shortcut-text">等待选择</code>
+            <button type="button" class="shortcut-edit-button" id="shortcut-edit-button" hidden>编辑</button>
+            <button type="button" class="mapping-unbind-button" id="mapping-unbind-button" hidden>撤销绑定</button>
+          </div>
+          <div class="shortcut-edit-panel" id="shortcut-edit-panel" hidden>
+            <label for="shortcut-edit-input">自定义快捷键</label>
+            <input id="shortcut-edit-input" type="text" maxlength="64" spellcheck="false"
+                   autocomplete="off" placeholder="例如 Ctrl+Shift+P" aria-label="自定义快捷键">
+            <div class="shortcut-edit-actions">
+              <button type="button" class="shortcut-save-button" id="shortcut-save-button">保存</button>
+              <button type="button" class="shortcut-cancel-button" id="shortcut-cancel-button">取消</button>
+            </div>
+            <p id="shortcut-edit-hint">留空保存可恢复默认触发操作。</p>
+          </div>
         </div>
 
         <div class="context-config" id="context-config" hidden>
           <div class="mapping-config-panel" id="assistant-config" hidden>
             <div class="config-heading">
-              <span>ASSISTANT MODE</span>
+              <span>Y VOICE MODE</span>
               <strong>语音方式</strong>
             </div>
-            <div class="mode-switch" role="group" aria-label="Assistant 语音模式">
+            <div class="mode-switch" role="group" aria-label="Y 键语音模式">
               <button type="button" data-assistant-mode="typeless">Typeless</button>
               <button type="button" data-assistant-mode="codex">Codex 听写</button>
             </div>
             <p id="assistant-mode-hint">按一下开始，再按一下结束并插入识别结果。</p>
           </div>
 
-          <div class="mapping-config-panel" id="plan-config" hidden>
-            <div class="config-heading">
-              <span>R2 SHORTCUT</span>
-              <strong>切换计划模式</strong>
-            </div>
-            <div class="shortcut-editor">
-              <input id="plan-shortcut-input" type="text" maxlength="64" spellcheck="false"
-                     autocomplete="off" placeholder="例如 Ctrl+Shift+P" aria-label="计划模式快捷键">
-              <button type="button" id="save-plan-shortcut">保存</button>
-            </div>
-            <p id="plan-shortcut-hint">尚未配置；留空保存可禁用 R2 输出。</p>
-          </div>
         </div>
 
         <div class="detail-divider"></div>
         <div class="meta-grid">
           <div class="meta-item">
             <span>配置</span>
-            <strong>controller-padmicro-profile.json</strong>
+            <strong id="profile-file-name">controller-padmicro-profile.stadia.json</strong>
           </div>
           <div class="meta-item">
             <span>交互热区</span>
-            <strong>27</strong>
+            <strong id="interaction-count">27</strong>
           </div>
           <div class="meta-item">
             <span>设备协议</span>
             <strong>SDL / HID</strong>
+          </div>
+          <div class="meta-item">
+            <span>当前手柄</span>
+            <strong id="controller-model">未检测到</strong>
           </div>
         </div>
       </aside>
     </main>
 
     <footer class="actionbar glass">
-      <div class="device-list">
-        <span class="device-label"><i class="device-dot"></i> Stadia</span>
-        <span class="device-label">Xbox</span>
-        <span class="device-label">Switch</span>
+      <div class="actionbar-leading">
+        <div class="device-list">
+          <span class="device-label"><i class="device-dot"></i> <b id="footer-controller-model">等待连接</b></span>
+        </div>
+        <label class="startup-setting" title="登录 Windows 后在后台启动 PadMicro">
+          <span>开机自启</span>
+          <input id="auto-start-toggle" type="checkbox" role="switch" aria-label="开机自启">
+          <i class="switch-track" aria-hidden="true"><b></b></i>
+        </label>
       </div>
       <div class="actions">
         <button class="button button-map" id="mapping-preview-button" aria-expanded="false" aria-controls="mapping-preview">

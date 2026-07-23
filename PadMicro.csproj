@@ -5,9 +5,18 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>PadMicro</AssemblyName>
+    <ApplicationIcon>Assets\Brand\PadMicro.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
-    <None Include="read-codex-tasks.cjs" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="read-codex-tasks.cjs" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="controller-padmicro-profile.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="controller-padmicro-profile.stadia.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="controller-padmicro-profile.xbox.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="controller-padmicro-profile.switch.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="README.md" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="THIRD_PARTY_NOTICES.md" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="ThirdParty\SDL2\SDL2.dll" Link="SDL2.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="ThirdParty\SDL2\LICENSE.txt" Link="SDL2-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Compile Remove="Ui\**\*.cs" />
   </ItemGroup>
 </Project>
