@@ -3,5 +3,7 @@ obj/
 Ui/bin/
 Ui/obj/
 publish/
+installer/output/
+publish-next/
 *.user
 *.log
