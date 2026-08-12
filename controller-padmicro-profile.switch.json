@@ -2,22 +2,21 @@
   "buttons": {
     "South": "Send",
     "East": "Cancel",
-    "North": "TypelessToggle",
+    "North": "ForkChat",
     "West": "SmartDelete",
-    "StadiaCapture": "ChooseProject",
-    "StadiaAssistant": "ForkChat",
-    "View": "QuickChat",
-    "Guide": "NewChat",
-    "Menu": "ChooseProject",
+    "View": "PreviousChat",
+    "Menu": "NextChat",
+    "Misc1": "NewChat",
+    "Guide": "SystemReserved",
     "LeftShoulder": "PreviousChat",
     "RightShoulder": "NextChat",
-    "LeftTrigger": "CyclePlanMode",
-    "RightTrigger": "NewChat",
+    "LeftTrigger": "CycleMode",
+    "RightTrigger": "CyclePlanMode",
     "RightStick": "Send",
-    "DpadUp": "OpenBrowser",
-    "DpadDown": "OpenTerminal",
+    "DpadUp": "OpenTerminal",
+    "DpadDown": "ToggleSidePanel",
     "DpadLeft": "ToggleSidebar",
-    "DpadRight": "ToggleSidePanel"
+    "DpadRight": "OpenBrowser"
   },
   "gestures": {
     "LeftStickUp": "ScrollUp",
@@ -29,9 +28,7 @@
     "RightStickLeft": "ArrowLeft",
     "RightStickRight": "ArrowRight"
   },
-  "customShortcuts": {},
-  "disabledBindings": [
-    "StadiaCapture",
-    "Guide"
-  ]
+  "customShortcuts": {
+    "RightTrigger": "Alt+Shift+P"
+  }
 }

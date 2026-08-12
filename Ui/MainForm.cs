@@ -5,6 +5,7 @@ using System.IO.Pipes;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Win32;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
@@ -12,12 +13,16 @@ namespace PadMicro.UI;
 
 internal sealed class MainForm : Form
 {
+    private const string AutoStartRegistryPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    private const string AutoStartRegistryValue = "PadMicro";
     private readonly bool autoStart;
+    private readonly bool startHidden;
     private readonly ControllerMapControl map;
     private readonly Label status;
     private readonly Label keyTitle;
     private readonly Label function;
     private readonly Label shortcut;
+    private readonly CheckBox autoStartCheckBox;
     private NotifyIcon? trayIcon;
     private ContextMenuStrip? trayMenu;
     private Icon? trayAppIcon;
@@ -27,21 +32,38 @@ internal sealed class MainForm : Form
     private Task? activationListener;
     private bool exitRequested;
     private bool trayHintShown;
+    private bool updatingAutoStartControl;
+    private int bridgeGeneration;
     private string currentStatusText = "正在准备";
     private string currentStatusTone = "warning";
+    private string? currentNoticeTitle;
+    private string? currentNoticeMessage;
+    private string? currentNoticeAction;
+    private string? lastTrayAlertKey;
+    private string? currentControllerName;
+    private string currentControllerFamily = "stadia";
+    private string currentProfileFile = "controller-padmicro-profile.stadia.json";
+    private bool controllerInputReady;
+    private DateTime? lastControllerInputAt;
+    private string? lastControllerInputKey;
+    private string? lastBlockedForeground;
 
-    public MainForm(bool autoStart)
+    public MainForm(bool autoStart, bool startHidden)
     {
         this.autoStart = autoStart;
+        this.startHidden = startHidden;
         Text = "PadMicro 控制台";
-        ClientSize = new Size(1220, 760);
-        MinimumSize = new Size(1040, 680);
+        if (startHidden) ShowInTaskbar = false;
+        ClientSize = new Size(1440, 900);
+        MinimumSize = new Size(1180, 760);
         BackColor = Color.FromArgb(8, 12, 21);
         ForeColor = Color.White;
         Font = new Font("Microsoft YaHei UI", 10f);
         DoubleBuffered = true;
         SetStyle(ControlStyles.ResizeRedraw, true);
         HandleCreated += (_, _) => EnableDarkTitleBar(Handle);
+        var webEntryAvailable = File.Exists(Path.Combine(AppContext.BaseDirectory, "Web", "index.html"));
+        if (webEntryAvailable) Opacity = 0;
 
         var header = new Panel
         {
@@ -100,12 +122,26 @@ internal sealed class MainForm : Form
         var start = MakeButton("启动桥接", Color.FromArgb(35, 207, 180), Color.FromArgb(48, 225, 197));
         var stop = MakeButton("停止", Color.FromArgb(28, 38, 55), Color.FromArgb(39, 51, 72));
         var export = MakeButton("导出映射图", Color.FromArgb(81, 91, 210), Color.FromArgb(99, 111, 232));
+        autoStartCheckBox = new CheckBox
+        {
+            Text = "开机自启",
+            Checked = IsAutoStartEnabled(),
+            AutoSize = true,
+            ForeColor = Color.FromArgb(154, 171, 198),
+            BackColor = Color.Transparent,
+            Font = new Font("Microsoft YaHei UI", 9f),
+            Location = new Point(225, 28)
+        };
         start.Size = new Size(126, 44);
         stop.Size = new Size(96, 44);
         export.Size = new Size(138, 44);
         start.Click += (_, _) => StartBridge();
         stop.Click += (_, _) => StopBridge();
         export.Click += (_, _) => ExportFromDialog();
+        autoStartCheckBox.CheckedChanged += (_, _) =>
+        {
+            if (!updatingAutoStartControl) SaveAutoStart(autoStartCheckBox.Checked);
+        };
         void PositionFooterButtons()
         {
             export.Location = new Point(footer.ClientSize.Width - export.Width - 30, 14);
@@ -113,7 +149,7 @@ internal sealed class MainForm : Form
             start.Location = new Point(stop.Left - start.Width - 10, 14);
         }
         footer.Resize += (_, _) => PositionFooterButtons();
-        footer.Controls.AddRange([deviceHint, start, stop, export]);
+        footer.Controls.AddRange([deviceHint, autoStartCheckBox, start, stop, export]);
         PositionFooterButtons();
 
         var content = new Panel
@@ -233,8 +269,16 @@ internal sealed class MainForm : Form
         if (autoStart) InitializeTray();
         Shown += async (_, _) =>
         {
+            if (this.startHidden) Hide();
             if (this.autoStart) StartBridge();
-            await InitializeWebInterfaceAsync();
+            try
+            {
+                await InitializeWebInterfaceAsync();
+            }
+            finally
+            {
+                Opacity = 1;
+            }
         };
         Resize += (_, _) =>
         {
@@ -265,7 +309,8 @@ internal sealed class MainForm : Form
         var existing = Process.GetProcessesByName("PadMicro").FirstOrDefault();
         if (existing is not null)
         {
-            TrackBridge(existing);
+            var generation = ++bridgeGeneration;
+            TrackBridge(existing, generation, null);
             SetStatus("● 桥接已在运行", Color.FromArgb(77, 220, 175), "PadMicro - 运行中");
             return;
         }
@@ -278,21 +323,30 @@ internal sealed class MainForm : Form
         }
         try
         {
+            currentControllerName = null;
+            controllerInputReady = false;
+            lastControllerInputAt = null;
+            lastControllerInputKey = null;
+            lastBlockedForeground = null;
             var start = new ProcessStartInfo(executable)
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                StandardOutputEncoding = System.Text.Encoding.UTF8,
+                StandardErrorEncoding = System.Text.Encoding.UTF8,
                 WorkingDirectory = AppContext.BaseDirectory
             };
             start.ArgumentList.Add(profile);
             var process = Process.Start(start);
             if (process is null) throw new InvalidOperationException("进程未启动");
-            TrackBridge(process);
-            _ = process.StandardOutput.ReadToEndAsync();
-            _ = process.StandardError.ReadToEndAsync();
-            SetStatus("● 手柄桥接运行中", Color.FromArgb(77, 220, 175), "PadMicro - 运行中");
+            var generation = ++bridgeGeneration;
+            var standardError = process.StandardError.ReadToEndAsync();
+            _ = ReadBridgeOutputAsync(process, generation);
+            SetStatus("● 正在检测手柄", Color.FromArgb(113, 167, 255), "PadMicro - 正在检测手柄");
+            TrackBridge(process, generation, standardError);
+            _ = ConfirmBridgeStartedAsync(process, generation);
         }
         catch (Exception ex)
         {
@@ -302,6 +356,7 @@ internal sealed class MainForm : Form
 
     private void StopBridge()
     {
+        ++bridgeGeneration;
         foreach (var process in Process.GetProcessesByName("PadMicro"))
         {
             try
@@ -317,6 +372,11 @@ internal sealed class MainForm : Form
         }
         try { bridge?.Dispose(); } catch { }
         bridge = null;
+        currentControllerName = null;
+        controllerInputReady = false;
+        lastControllerInputAt = null;
+        lastControllerInputKey = null;
+        lastBlockedForeground = null;
         SetStatus("● 桥接已停止", Color.FromArgb(255, 194, 89), "PadMicro - 已停止");
     }
 
@@ -410,30 +470,187 @@ internal sealed class MainForm : Form
         }, token);
     }
 
-    private void TrackBridge(Process process)
+    private void TrackBridge(Process process, int generation, Task<string>? standardError)
     {
         try { bridge?.Dispose(); } catch { }
         bridge = process;
         bridge.EnableRaisingEvents = true;
-        bridge.Exited += (_, _) =>
+        bridge.Exited += async (_, _) =>
         {
-            if (IsDisposed || Disposing) return;
+            var exitCode = -1;
+            try { exitCode = process.ExitCode; } catch { }
+            var error = "";
+            if (standardError is not null)
+            {
+                try { error = await standardError; } catch { }
+            }
+            if (IsDisposed || Disposing || generation != bridgeGeneration)
+            {
+                process.Dispose();
+                return;
+            }
             try
             {
-                BeginInvoke(() => SetStatus("● 桥接已停止", Color.FromArgb(255, 194, 89),
-                    "PadMicro - 已停止"));
+                BeginInvoke(() => HandleBridgeExited(process, generation, exitCode, error));
             }
             catch { }
         };
     }
 
-    private void SetStatus(string text, Color color, string trayText)
+    private async Task ConfirmBridgeStartedAsync(Process process, int generation)
+    {
+        await Task.Delay(500);
+        if (IsDisposed || Disposing || generation != bridgeGeneration) return;
+        try
+        {
+            if (process.HasExited) return;
+            BeginInvoke(() =>
+            {
+                if (generation != bridgeGeneration || process.HasExited) return;
+                if (controllerInputReady)
+                    SetStatus($"● {currentControllerName ?? "手柄"} 已连接", Color.FromArgb(77, 220, 175), "PadMicro - 运行中");
+            });
+        }
+        catch { }
+    }
+
+    private async Task ReadBridgeOutputAsync(Process process, int generation)
+    {
+        try
+        {
+            while (await process.StandardOutput.ReadLineAsync() is { } line)
+            {
+                if (IsDisposed || Disposing || generation != bridgeGeneration) return;
+                try { BeginInvoke(() => HandleBridgeOutput(line, generation)); }
+                catch { return; }
+            }
+        }
+        catch { }
+    }
+
+    private void HandleBridgeOutput(string line, int generation)
+    {
+        if (generation != bridgeGeneration) return;
+        const string devicePrefix = "PADMICRO_DEVICE|";
+        const string familyPrefix = "PADMICRO_FAMILY|";
+        const string profilePrefix = "PADMICRO_PROFILE|";
+        const string inputPrefix = "PADMICRO_INPUT|";
+        const string blockedPrefix = "PADMICRO_BLOCKED|";
+
+        if (line.StartsWith(devicePrefix, StringComparison.Ordinal))
+        {
+            currentControllerName = line[devicePrefix.Length..].Trim();
+            SendWebState();
+            return;
+        }
+        if (line.StartsWith(familyPrefix, StringComparison.Ordinal))
+        {
+            currentControllerFamily = line[familyPrefix.Length..].Trim().ToLowerInvariant();
+            SendWebState();
+            return;
+        }
+        if (line.StartsWith(profilePrefix, StringComparison.Ordinal))
+        {
+            currentProfileFile = Path.GetFileName(line[profilePrefix.Length..].Trim());
+            map.ReloadMappings(LoadMappings());
+            SendWebState();
+            return;
+        }
+        if (line.Equals("PADMICRO_READY", StringComparison.Ordinal))
+        {
+            controllerInputReady = true;
+            SetStatus($"● {currentControllerName ?? "手柄"} 已连接", Color.FromArgb(77, 220, 175), "PadMicro - 运行中");
+            return;
+        }
+        if (line.StartsWith(inputPrefix, StringComparison.Ordinal))
+        {
+            lastControllerInputAt = DateTime.Now;
+            lastControllerInputKey = line[inputPrefix.Length..].Trim();
+            lastBlockedForeground = null;
+            SendWebState();
+            return;
+        }
+        if (line.StartsWith(blockedPrefix, StringComparison.Ordinal))
+        {
+            lastBlockedForeground = line[blockedPrefix.Length..].Trim();
+            SetStatus("● 已收到手柄输入，但 Codex 不在前台", Color.FromArgb(255, 194, 89),
+                "PadMicro - 输入已被暂停",
+                "手柄输入已识别",
+                $"当前前台程序是“{lastBlockedForeground}”。请先切换到 Codex，再操作手柄。",
+                null);
+        }
+    }
+
+    private void HandleBridgeExited(Process process, int generation, int exitCode, string error)
+    {
+        if (generation != bridgeGeneration) return;
+        if (ReferenceEquals(bridge, process)) bridge = null;
+        process.Dispose();
+
+        if (exitCode == 4 || error.Contains("没有找到兼容的游戏手柄", StringComparison.Ordinal))
+        {
+            SetStatus("● 等待手柄连接", Color.FromArgb(255, 194, 89), "PadMicro - 未检测到手柄",
+                "未检测到手柄",
+                "请打开手柄，并在 Windows 蓝牙设置中确认它显示为“已连接”，然后重新检测。支持 Stadia、Xbox 和 Switch 手柄。",
+                "start", notifyWhenHidden: true);
+            return;
+        }
+
+        if (error.Contains("手柄连接已断开", StringComparison.Ordinal))
+        {
+            SetStatus("● 手柄连接已断开", Color.FromArgb(255, 194, 89), "PadMicro - 手柄已断开",
+                "手柄连接已断开",
+                "请检查手柄电量和蓝牙连接。重新连接成功后，点击“重新检测”即可恢复桥接。",
+                "start", notifyWhenHidden: true);
+            return;
+        }
+
+        if (exitCode == 2)
+        {
+            SetStatus("● 缺少 SDL2 运行库", Color.FromArgb(255, 104, 120), "PadMicro - 运行库缺失",
+                "桥接组件不完整",
+                "没有找到 SDL2 运行库。请重新安装 PadMicro；若使用便携版，请确认 SDL2.dll 与 PadMicro.exe 位于同一目录。",
+                null, notifyWhenHidden: true);
+            return;
+        }
+
+        if (exitCode == 3)
+        {
+            SetStatus("● 手柄输入初始化失败", Color.FromArgb(255, 104, 120), "PadMicro - 初始化失败",
+                "无法初始化手柄输入",
+                string.IsNullOrWhiteSpace(error) ? "Windows 手柄输入服务初始化失败，请重启 PadMicro 或 Windows 后再试。" : error.Trim(),
+                "start", notifyWhenHidden: true);
+            return;
+        }
+
+        SetStatus("● 桥接意外停止", Color.FromArgb(255, 104, 120), "PadMicro - 桥接异常停止",
+            "桥接服务意外停止",
+            string.IsNullOrWhiteSpace(error) ? $"后台桥接进程已退出（代码 {exitCode}）。可点击重新检测再次启动。" : error.Trim(),
+            "start", notifyWhenHidden: true);
+    }
+
+    private void SetStatus(string text, Color color, string trayText, string? noticeTitle = null,
+        string? noticeMessage = null, string? noticeAction = null, bool notifyWhenHidden = false)
     {
         status.Text = text;
         status.ForeColor = color;
         currentStatusText = text;
         currentStatusTone = StatusTone(color);
+        currentNoticeTitle = noticeTitle;
+        currentNoticeMessage = noticeMessage;
+        currentNoticeAction = noticeAction;
         if (trayIcon is not null) trayIcon.Text = trayText.Length > 63 ? trayText[..63] : trayText;
+        if (noticeTitle is null)
+        {
+            lastTrayAlertKey = null;
+        }
+        else if (notifyWhenHidden && trayIcon is not null && (!Visible || !ShowInTaskbar)
+                 && !string.Equals(lastTrayAlertKey, noticeTitle, StringComparison.Ordinal))
+        {
+            lastTrayAlertKey = noticeTitle;
+            trayIcon.ShowBalloonTip(4500, noticeTitle, noticeMessage ?? "请打开 PadMicro 查看详情。",
+                currentStatusTone == "danger" ? ToolTipIcon.Error : ToolTipIcon.Warning);
+        }
         SendWebState();
     }
 
@@ -472,13 +689,20 @@ internal sealed class MainForm : Form
                 AppContext.BaseDirectory,
                 CoreWebView2HostResourceAccessKind.DenyCors);
             view.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
-            view.NavigationCompleted += (_, _) => SendWebState();
+            var navigationReady = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            view.NavigationCompleted += (_, e) =>
+            {
+                SendWebState();
+                navigationReady.TrySetResult(e.IsSuccess);
+            };
             webView = view;
             SetNativeInterfaceVisible(false);
             view.Bounds = ClientRectangle;
             view.BringToFront();
             view.Source = new Uri("https://stadiabridge.local/Web/index.html");
             view.Visible = true;
+            if (!await navigationReady.Task.WaitAsync(TimeSpan.FromSeconds(8)))
+                throw new InvalidOperationException("Web 界面导航失败。");
         }
         catch (Exception ex)
         {
@@ -516,7 +740,10 @@ internal sealed class MainForm : Form
             if (!string.Equals(type, "command", StringComparison.OrdinalIgnoreCase)
                 || !root.TryGetProperty("command", out var commandValue)) return;
 
-            var value = root.TryGetProperty("value", out var valueElement) ? valueElement.GetString() : null;
+            var hasValue = root.TryGetProperty("value", out var valueElement);
+            var value = hasValue && valueElement.ValueKind == JsonValueKind.String
+                ? valueElement.GetString()
+                : null;
             switch (commandValue.GetString()?.ToLowerInvariant())
             {
                 case "start": StartBridge(); break;
@@ -524,7 +751,30 @@ internal sealed class MainForm : Form
                 case "export": ExportFromDialog(); break;
                 case "tray": HideToTray(); break;
                 case "set-assistant-mode": SaveAssistantMode(value); break;
-                case "set-plan-shortcut": SavePlanShortcut(value); break;
+                case "set-mapping-shortcut":
+                    if (hasValue && valueElement.ValueKind == JsonValueKind.Object)
+                    {
+                        var profileKey = valueElement.TryGetProperty("profileKey", out var keyElement)
+                            ? keyElement.GetString()
+                            : null;
+                        var shortcut = valueElement.TryGetProperty("shortcut", out var shortcutElement)
+                            ? shortcutElement.GetString()
+                            : null;
+                        SaveMappingShortcut(profileKey, shortcut);
+                    }
+                    break;
+                case "set-mapping-enabled":
+                    if (hasValue && valueElement.ValueKind == JsonValueKind.Object)
+                    {
+                        var profileKey = valueElement.TryGetProperty("profileKey", out var keyElement)
+                            ? keyElement.GetString()
+                            : null;
+                        var enabled = valueElement.TryGetProperty("enabled", out var enabledElement)
+                                      && enabledElement.ValueKind == JsonValueKind.True;
+                        SaveMappingEnabled(profileKey, enabled);
+                    }
+                    break;
+                case "set-auto-start": SaveAutoStart(string.Equals(value, "true", StringComparison.OrdinalIgnoreCase)); break;
             }
         }
         catch (JsonException) { }
@@ -533,14 +783,19 @@ internal sealed class MainForm : Form
     private void SendWebState()
     {
         if (webView?.CoreWebView2 is null) return;
-        map.ReloadMappings(LoadMappings());
-        var mappings = map.Items.ToDictionary(
-            item => item.ProfileKey,
+        var loadedMappings = LoadMappings();
+        map.ReloadMappings(loadedMappings);
+        var mappings = loadedMappings.ToDictionary(
+            item => item.Key,
             item => new
             {
-                item.Display,
-                Function = item.Function,
-                Shortcut = string.IsNullOrWhiteSpace(item.Shortcut) ? "未设置快捷键" : item.Shortcut
+                Display = ControllerDisplayName(item.Key),
+                Function = item.Value.Function,
+                Shortcut = string.IsNullOrWhiteSpace(item.Value.Shortcut) ? "未设置快捷键" : item.Value.Shortcut,
+                item.Value.Action,
+                item.Value.DefaultShortcut,
+                item.Value.CustomShortcut,
+                item.Value.Enabled
             },
             StringComparer.OrdinalIgnoreCase);
         var payload = new
@@ -549,6 +804,23 @@ internal sealed class MainForm : Form
             Status = currentStatusText,
             Tone = currentStatusTone,
             Running = IsBridgeRunning(),
+            Controller = new
+            {
+                Name = currentControllerName,
+                Family = currentControllerFamily,
+                Profile = currentProfileFile,
+                Connected = controllerInputReady,
+                LastInputAt = lastControllerInputAt,
+                LastInputKey = lastControllerInputKey,
+                BlockedForeground = lastBlockedForeground
+            },
+            Notice = new
+            {
+                Visible = !string.IsNullOrWhiteSpace(currentNoticeTitle),
+                Title = currentNoticeTitle,
+                Message = currentNoticeMessage,
+                Action = currentNoticeAction
+            },
             Mappings = mappings,
             Settings = ReadProfileSettings()
         };
@@ -559,6 +831,39 @@ internal sealed class MainForm : Form
         try { webView.CoreWebView2.PostWebMessageAsJson(json); }
         catch (InvalidOperationException) { }
     }
+
+    private string ControllerDisplayName(string key) => key switch
+    {
+        "South" => "A",
+        "East" => "B",
+        "West" => "X",
+        "North" => "Y",
+        "View" => currentControllerFamily == "xbox" ? "View" : "View（三点）",
+        "Menu" => currentControllerFamily == "xbox" ? "Menu" : "Menu（三横）",
+        "Guide" => currentControllerFamily == "xbox" ? "Xbox 键" : "Stadia 键",
+        "Misc1" => "Share",
+        "StadiaAssistant" => "Assistant（四点）",
+        "StadiaCapture" => "Capture（取景框）",
+        "LeftTrigger" => "L2",
+        "RightTrigger" => "R2",
+        "LeftShoulder" => "L1",
+        "RightShoulder" => "R1",
+        "LeftStick" => "L3",
+        "RightStick" => "R3",
+        "DpadUp" => "十字键 ↑",
+        "DpadDown" => "十字键 ↓",
+        "DpadLeft" => "十字键 ←",
+        "DpadRight" => "十字键 →",
+        "LeftStickUp" => "左摇杆 ↑",
+        "LeftStickDown" => "左摇杆 ↓",
+        "LeftStickLeft" => "左摇杆 ←",
+        "LeftStickRight" => "左摇杆 →",
+        "RightStickUp" => "右摇杆 ↑",
+        "RightStickDown" => "右摇杆 ↓",
+        "RightStickLeft" => "右摇杆 ←",
+        "RightStickRight" => "右摇杆 →",
+        _ => key
+    };
 
     private void SaveAssistantMode(string? mode)
     {
@@ -573,32 +878,128 @@ internal sealed class MainForm : Form
         {
             var buttons = root["buttons"] as JsonObject ?? new JsonObject();
             root["buttons"] = buttons;
-            buttons["StadiaAssistant"] = action;
+            buttons["North"] = action;
         });
     }
 
-    private void SavePlanShortcut(string? shortcut)
+    private void SaveMappingShortcut(string? profileKey, string? shortcut)
     {
+        if (string.IsNullOrWhiteSpace(profileKey))
+        {
+            SendShortcutResult(profileKey, false, "没有选中可编辑的按键。");
+            return;
+        }
         var normalized = shortcut?.Trim() ?? "";
         if (!IsSupportedShortcut(normalized))
         {
             SetStatus("● 快捷键格式无效", Color.FromArgb(255, 104, 120),
                 "PadMicro - 快捷键格式无效");
+            SendShortcutResult(profileKey, false, "格式无效。示例：Ctrl+Shift+P、Alt+F4、RightAlt。");
             return;
         }
-        UpdateProfile(root =>
+
+        var saved = UpdateProfile(root =>
         {
+            var action = FindMappedAction(root, profileKey)
+                         ?? throw new InvalidOperationException($"配置中没有找到键位 {profileKey}。");
             var shortcuts = root["customShortcuts"] as JsonObject ?? new JsonObject();
             root["customShortcuts"] = shortcuts;
-            shortcuts["CyclePlanMode"] = normalized;
+            if (string.IsNullOrWhiteSpace(normalized)) shortcuts.Remove(profileKey);
+            else shortcuts[profileKey] = normalized;
+
+            // Migrate the former R2 action-level setting to the per-control format.
+            if (profileKey.Equals("RightTrigger", StringComparison.OrdinalIgnoreCase)
+                && shortcuts.ContainsKey(action))
+                shortcuts.Remove(action);
+        });
+        SendShortcutResult(profileKey, saved,
+            saved
+                ? string.IsNullOrWhiteSpace(normalized) ? "已恢复默认触发操作。" : $"已保存：{normalized}"
+                : "保存失败，请查看顶部状态提示。");
+    }
+
+    private static string? FindMappedAction(JsonObject root, string profileKey)
+    {
+        foreach (var groupName in new[] { "buttons", "gestures" })
+            if (root[groupName] is JsonObject group
+                && group.TryGetPropertyValue(profileKey, out var value)
+                && value is JsonValue jsonValue
+                && jsonValue.TryGetValue<string>(out var action))
+                return action;
+        return null;
+    }
+
+    private void SaveMappingEnabled(string? profileKey, bool enabled)
+    {
+        if (string.IsNullOrWhiteSpace(profileKey)) return;
+        UpdateProfile(root =>
+        {
+            _ = FindMappedAction(root, profileKey)
+                ?? throw new InvalidOperationException($"配置中没有找到键位 {profileKey}。");
+            var disabled = root["disabledBindings"] as JsonArray ?? new JsonArray();
+            root["disabledBindings"] = disabled;
+            for (var index = disabled.Count - 1; index >= 0; index--)
+            {
+                if (disabled[index] is JsonValue value
+                    && value.TryGetValue<string>(out var key)
+                    && key.Equals(profileKey, StringComparison.OrdinalIgnoreCase))
+                    disabled.RemoveAt(index);
+            }
+            if (!enabled) disabled.Add(profileKey);
         });
     }
 
-    private void UpdateProfile(Action<JsonObject> update)
+    private void SendShortcutResult(string? profileKey, bool success, string message)
+    {
+        if (webView?.CoreWebView2 is null) return;
+        var json = JsonSerializer.Serialize(new
+        {
+            Type = "shortcut-result",
+            ProfileKey = profileKey,
+            Success = success,
+            Message = message
+        }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+        try { webView.CoreWebView2.PostWebMessageAsJson(json); }
+        catch (InvalidOperationException) { }
+    }
+
+    private void SaveAutoStart(bool enabled)
     {
         try
         {
-            var path = Path.Combine(AppContext.BaseDirectory, "controller-padmicro-profile.json");
+            if (enabled)
+            {
+                using var key = Registry.CurrentUser.CreateSubKey(AutoStartRegistryPath, writable: true)
+                    ?? throw new InvalidOperationException("无法打开当前用户的启动项注册表。");
+                key.SetValue(AutoStartRegistryValue, $"\"{Application.ExecutablePath}\" --background",
+                    RegistryValueKind.String);
+            }
+            else
+            {
+                using var key = Registry.CurrentUser.OpenSubKey(AutoStartRegistryPath, writable: true);
+                key?.DeleteValue(AutoStartRegistryValue, throwOnMissingValue: false);
+            }
+
+            updatingAutoStartControl = true;
+            autoStartCheckBox.Checked = enabled;
+            updatingAutoStartControl = false;
+            SendWebState();
+        }
+        catch (Exception ex)
+        {
+            updatingAutoStartControl = true;
+            autoStartCheckBox.Checked = IsAutoStartEnabled();
+            updatingAutoStartControl = false;
+            SetStatus("● 修改开机自启失败：" + ex.Message, Color.FromArgb(255, 104, 120),
+                "PadMicro - 设置失败");
+        }
+    }
+
+    private bool UpdateProfile(Action<JsonObject> update)
+    {
+        try
+        {
+            var path = GetCurrentProfilePath();
             var root = JsonNode.Parse(File.ReadAllText(path)) as JsonObject ?? new JsonObject();
             update(root);
             File.WriteAllText(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
@@ -615,33 +1016,49 @@ internal sealed class MainForm : Form
                     "PadMicro - 配置已保存");
             }
             SendWebState();
+            return true;
         }
         catch (Exception ex)
         {
             SetStatus("● 保存配置失败：" + ex.Message, Color.FromArgb(255, 104, 120),
                 "PadMicro - 保存配置失败");
+            return false;
         }
     }
 
-    private static object ReadProfileSettings()
+    private object ReadProfileSettings()
     {
         var assistantMode = "typeless";
-        var planShortcut = "";
         try
         {
             using var document = JsonDocument.Parse(File.ReadAllText(
-                Path.Combine(AppContext.BaseDirectory, "controller-padmicro-profile.json")));
+                GetCurrentProfilePath()));
             var root = document.RootElement;
             if (root.TryGetProperty("buttons", out var buttons)
-                && buttons.TryGetProperty("StadiaAssistant", out var assistantAction)
+                && buttons.TryGetProperty("North", out var assistantAction)
                 && string.Equals(assistantAction.GetString(), "CodexDictation", StringComparison.OrdinalIgnoreCase))
                 assistantMode = "codex";
-            if (root.TryGetProperty("customShortcuts", out var shortcuts)
-                && shortcuts.TryGetProperty("CyclePlanMode", out var shortcut))
-                planShortcut = shortcut.GetString() ?? "";
         }
         catch { }
-        return new { AssistantMode = assistantMode, PlanShortcut = planShortcut };
+        return new
+        {
+            AssistantMode = assistantMode,
+            AutoStartEnabled = IsAutoStartEnabled()
+        };
+    }
+
+    private static bool IsAutoStartEnabled()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(AutoStartRegistryPath);
+            return key?.GetValue(AutoStartRegistryValue) is string command
+                   && !string.IsNullOrWhiteSpace(command);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static bool IsSupportedShortcut(string shortcut)
@@ -655,7 +1072,12 @@ internal sealed class MainForm : Form
         {
             if (!unique.Add(part)) return false;
             var token = part.ToUpperInvariant();
-            if (token is "CTRL" or "CONTROL" or "SHIFT" or "ALT" or "RIGHTALT" or "RALT") continue;
+            if (token is "RIGHTALT" or "RALT")
+            {
+                if (parts.Length == 1) hasPrimary = true;
+                continue;
+            }
+            if (token is "CTRL" or "CONTROL" or "SHIFT" or "ALT") continue;
             var valid = token.Length == 1 && char.IsLetterOrDigit(token[0]);
             valid |= token.StartsWith('F') && int.TryParse(token[1..], out var functionKey)
                      && functionKey is >= 1 and <= 24;
@@ -723,22 +1145,15 @@ internal sealed class MainForm : Form
 
     private static Icon CreateTrayIcon()
     {
-        using var bitmap = new Bitmap(32, 32);
-        using (var graphics = Graphics.FromImage(bitmap))
+        var iconPath = Path.Combine(AppContext.BaseDirectory, "PadMicro.ico");
+        if (File.Exists(iconPath))
         {
-            graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            graphics.Clear(Color.Transparent);
-            using var outer = new SolidBrush(Color.FromArgb(40, 220, 190));
-            using var inner = new SolidBrush(Color.FromArgb(14, 24, 40));
-            graphics.FillEllipse(outer, 1, 1, 30, 30);
-            graphics.FillEllipse(inner, 4, 4, 24, 24);
-            using var font = new Font("Segoe UI", 15f, FontStyle.Bold, GraphicsUnit.Pixel);
-            using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-            graphics.DrawString("S", font, Brushes.White, new RectangleF(4, 3, 24, 25), format);
+            using var icon = new Icon(iconPath, new Size(32, 32));
+            return (Icon)icon.Clone();
         }
-        var handle = bitmap.GetHicon();
-        try { return (Icon)Icon.FromHandle(handle).Clone(); }
-        finally { DestroyIcon(handle); }
+
+        using var associated = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+        return associated is null ? (Icon)SystemIcons.Application.Clone() : (Icon)associated.Clone();
     }
 
     private static bool IsBridgeRunning()
@@ -775,22 +1190,33 @@ internal sealed class MainForm : Form
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 
-    [DllImport("user32.dll")]
-    private static extern bool DestroyIcon(IntPtr handle);
+    private string GetCurrentProfilePath()
+    {
+        var selected = Path.Combine(AppContext.BaseDirectory, currentProfileFile);
+        return File.Exists(selected)
+            ? selected
+            : Path.Combine(AppContext.BaseDirectory, "controller-padmicro-profile.json");
+    }
 
-    private static Dictionary<string, MappingInfo> LoadMappings()
+    private Dictionary<string, MappingInfo> LoadMappings()
     {
         var actions = ActionCatalog.All;
         var result = new Dictionary<string, MappingInfo>(StringComparer.OrdinalIgnoreCase);
-        var profilePath = Path.Combine(AppContext.BaseDirectory, "controller-padmicro-profile.json");
+        var profilePath = GetCurrentProfilePath();
         if (!File.Exists(profilePath)) return result;
         try
         {
             using var document = JsonDocument.Parse(File.ReadAllText(profilePath));
             var shortcutOverrides = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var disabledBindings = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (document.RootElement.TryGetProperty("customShortcuts", out var customShortcuts))
                 foreach (var property in customShortcuts.EnumerateObject())
                     shortcutOverrides[property.Name] = property.Value.GetString() ?? "";
+            if (document.RootElement.TryGetProperty("disabledBindings", out var disabled)
+                && disabled.ValueKind == JsonValueKind.Array)
+                foreach (var item in disabled.EnumerateArray())
+                    if (item.ValueKind == JsonValueKind.String && item.GetString() is { } key)
+                        disabledBindings.Add(key);
             foreach (var group in new[] { "buttons", "gestures" })
             {
                 if (!document.RootElement.TryGetProperty(group, out var mappings)) continue;
@@ -798,9 +1224,22 @@ internal sealed class MainForm : Form
                 {
                     var action = property.Value.GetString() ?? "";
                     var info = actions.GetValueOrDefault(action, new MappingInfo(action, ""));
-                    if (shortcutOverrides.TryGetValue(action, out var customShortcut))
+                    var defaultShortcut = info.Shortcut;
+                    string? customShortcut = null;
+                    if (!shortcutOverrides.TryGetValue(property.Name, out customShortcut)
+                        && !shortcutOverrides.TryGetValue(action, out customShortcut))
+                        customShortcut = null;
+                    if (!string.IsNullOrWhiteSpace(customShortcut))
                         info = info with { Shortcut = customShortcut };
-                    result[property.Name] = info;
+                    result[property.Name] = info with
+                    {
+                        Function = disabledBindings.Contains(property.Name) ? "未绑定" : info.Function,
+                        Shortcut = disabledBindings.Contains(property.Name) ? "不发送命令" : info.Shortcut,
+                        Action = action,
+                        DefaultShortcut = defaultShortcut,
+                        CustomShortcut = customShortcut,
+                        Enabled = !disabledBindings.Contains(property.Name)
+                    };
                 }
             }
         }
@@ -992,7 +1431,8 @@ internal sealed class ControllerMapControl : Control
         MapItem Item(string key, string display, float x, float y, float radius = 24, bool list = true)
         {
             var info = mappings.GetValueOrDefault(key, new MappingInfo("未映射", ""));
-            return new MapItem(key, display, info.Function, info.Shortcut, x, y, radius, list);
+            return new MapItem(key, display, info.Function, info.Shortcut, info.Action,
+                info.DefaultShortcut, info.CustomShortcut, x, y, radius, list);
         }
 
         return new List<MapItem>
@@ -1316,12 +1756,21 @@ internal sealed record MapItem(
     string Display,
     string Function,
     string Shortcut,
+    string Action,
+    string DefaultShortcut,
+    string? CustomShortcut,
     float X,
     float Y,
     float Radius,
     bool ShowInList);
 
-internal sealed record MappingInfo(string Function, string Shortcut);
+internal sealed record MappingInfo(
+    string Function,
+    string Shortcut,
+    string Action = "",
+    string DefaultShortcut = "",
+    string? CustomShortcut = null,
+    bool Enabled = true);
 
 internal static class ActionCatalog
 {
@@ -1331,14 +1780,16 @@ internal static class ActionCatalog
         ["Cancel"] = new("中断运行或关闭窗口", "Esc"),
         ["ForkChat"] = new("在新任务中继续当前对话", "/fork"),
         ["SmartDelete"] = new("单击退格；双击全选输入框", "Backspace / Ctrl+A"),
-        ["ChooseProject"] = new("选择项目", "Ctrl+Alt+Shift+O"),
+        ["ChooseProject"] = new("选择项目", "/project"),
         ["TypelessToggle"] = new("开始或结束 Typeless 听写", "Right Alt"),
         ["NewChat"] = new("创建新任务", "codex://threads/new"),
+        ["QuickChat"] = new("新聊天", "Ctrl+Alt+N"),
         ["PreviousChat"] = new("向左切换侧边栏任务", "Ctrl+Shift+["),
         ["NextChat"] = new("向右切换侧边栏任务", "Ctrl+Shift+]"),
         ["CycleMode"] = new("循环模式", "Shift+Tab"),
         ["CodexDictation"] = new("Codex 自带听写", "Ctrl+Shift+D"),
-        ["CyclePlanMode"] = new("切换计划模式", ""),
+        ["SystemReserved"] = new("系统保留（开机 / Xbox Game Bar）", "不发送命令"),
+        ["CyclePlanMode"] = new("切换计划模式", "/plan"),
         ["OpenTerminal"] = new("打开终端", "Ctrl+`"),
         ["ToggleSidePanel"] = new("显示或隐藏边栏", "Ctrl+Alt+B"),
         ["ToggleSidebar"] = new("切换 Sidebar", "Ctrl+B"),

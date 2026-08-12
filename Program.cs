@@ -28,6 +28,7 @@ internal static class Program
         ["Send"] = new("提交/确认", new[] { new[] { 0x0D } }),
         ["Cancel"] = new("中断/关闭", new[] { new[] { 0x1B } }),
         ["NewChat"] = new("新建任务", Uri: "codex://threads/new"),
+        ["QuickChat"] = new("新聊天", new[] { new[] { 0x11, 0x12, 0x4E } }),
         ["DictationHold"] = new("按住说话", new[] { new[] { 0x11, 0x10, 0x44 } }, Hold: true),
         ["TypelessToggle"] = new("Typeless 语音开关", new[] { new[] { 0xA5 } }),
         ["PreviousChat"] = new("上一个任务", new[] { new[] { 0x11, 0x10, 0xDB } }),
@@ -45,7 +46,7 @@ internal static class Program
         ["ModelPicker"] = new("打开模型选择器", new[] { new[] { 0x11, 0x10, 0x4D } }),
         ["Review"] = new("审查标签页", new[] { new[] { 0x11, 0x10, 0x47 } }),
         ["SmartDelete"] = new("单击退格 / 双击全选", new[] { new[] { 0x08 } }, DoubleChords: new[] { new[] { 0x11, 0x41 } }),
-        ["ChooseProject"] = new("选择项目", new[] { new[] { 0x11, 0x12, 0x10, 0x4F } }),
+        ["ChooseProject"] = new("选择项目", new[] { new[] { 0x0D } }, Text: "/project", StepDelayMs: 120),
         ["ForkChat"] = new("在新任务中继续", new[] { new[] { 0x0D } }, Text: "/fork", StepDelayMs: 120),
         ["ScrollUp"] = new("聊天向上滚动", Custom: "ScrollUp"),
         ["ScrollDown"] = new("聊天向下滚动", Custom: "ScrollDown"),
@@ -54,7 +55,8 @@ internal static class Program
         ["OpenTerminal"] = new("终端", new[] { new[] { 0x11, 0xC0 } }),
         ["ToggleSidePanel"] = new("显示/隐藏边栏", new[] { new[] { 0x11, 0x12, 0x42 } }),
         ["CodexDictation"] = new("按住使用 Codex 听写", new[] { new[] { 0x11, 0x10, 0x44 } }, Hold: true),
-        ["CyclePlanMode"] = new("切换计划模式（快捷键未配置）")
+        ["SystemReserved"] = new("系统保留（开机 / Xbox Game Bar）"),
+        ["CyclePlanMode"] = new("切换计划模式", new[] { new[] { 0x0D } }, Text: "/plan", StepDelayMs: 120)
     };
 
     private static int Main(string[] args)
@@ -73,11 +75,15 @@ internal static class Program
                           ?? Path.Combine(baseDir, "controller-padmicro-profile.json");
         var profile = LoadProfile(profilePath);
 
-        var sdlPath = Environment.GetEnvironmentVariable("PADMICRO_SDL2") ?? DefaultSdlPath;
+        var configuredSdlPath = Environment.GetEnvironmentVariable("PADMICRO_SDL2");
+        var bundledSdlPath = Path.Combine(baseDir, "SDL2.dll");
+        var sdlPath = !string.IsNullOrWhiteSpace(configuredSdlPath)
+            ? configuredSdlPath
+            : File.Exists(bundledSdlPath) ? bundledSdlPath : DefaultSdlPath;
         if (!File.Exists(sdlPath))
         {
             Console.Error.WriteLine($"找不到 SDL2：{sdlPath}");
-            Console.Error.WriteLine("请安装 AntiMicroX，或设置 PADMICRO_SDL2 环境变量。");
+            Console.Error.WriteLine("请重新安装 PadMicro，或设置 PADMICRO_SDL2 环境变量。");
             return 2;
         }
 
@@ -92,19 +98,31 @@ internal static class Program
 
         try
         {
-            var controller = OpenGameController();
+            var controller = OpenGameController(out var controllerName);
             if (controller == IntPtr.Zero)
             {
                 Console.Error.WriteLine("没有找到兼容的游戏手柄。请先连接 Stadia、Xbox 或 Switch 手柄再运行。");
                 return 4;
             }
 
+            var controllerFamily = DetectControllerFamily(controllerName);
+            var selectedProfilePath = ResolveControllerProfilePath(profilePath, controllerFamily);
+            if (!selectedProfilePath.Equals(profilePath, StringComparison.OrdinalIgnoreCase))
+            {
+                profilePath = selectedProfilePath;
+                profile = LoadProfile(profilePath);
+            }
+            Console.WriteLine($"PADMICRO_FAMILY|{controllerFamily}");
+            Console.WriteLine($"PADMICRO_PROFILE|{Path.GetFileName(profilePath)}");
+
             if (checkOnly)
             {
                 PrintMappings(profile);
                 SDL_GameControllerUpdate();
                 Console.WriteLine($"标准扳机静止值：L2={SDL_GameControllerGetAxis(controller, 4)}, R2={SDL_GameControllerGetAxis(controller, 5)}");
-                using var specialButtons = StadiaSpecialButtonReader.TryStart(() => { }, () => { });
+                using var specialButtons = controllerFamily == "stadia"
+                    ? StadiaSpecialButtonReader.TryStart(() => { }, () => { })
+                    : null;
                 Console.WriteLine($"可跨项目导航的任务：{TaskNavigator.CountTasks()}");
                 Console.WriteLine("手柄输入检查通过。");
                 SDL_GameControllerClose(controller);
@@ -113,10 +131,15 @@ internal static class Program
 
             if (diagnose)
             {
-                using var specialButtons = StadiaSpecialButtonReader.TryStart(
-                    () => Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}  Stadia Capture: DOWN"),
-                    () => Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}  Stadia Assistant: DOWN"));
-                RunRawDiagnostic(controller, Path.Combine(baseDir, "stadia-diagnostic.log"), TimeSpan.FromSeconds(25));
+                using var specialButtons = controllerFamily == "stadia"
+                    ? StadiaSpecialButtonReader.TryStart(
+                        () => Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}  Stadia Capture: DOWN"),
+                        () => Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}  Stadia Assistant: DOWN"))
+                    : null;
+                var diagnosticPath = Path.Combine(Path.GetTempPath(), "PadMicro", "controller-diagnostic.log");
+                Directory.CreateDirectory(Path.GetDirectoryName(diagnosticPath)!);
+                Console.WriteLine($"诊断日志：{diagnosticPath}");
+                RunRawDiagnostic(controller, diagnosticPath, TimeSpan.FromSeconds(25));
                 SDL_GameControllerClose(controller);
                 return 0;
             }
@@ -127,7 +150,7 @@ internal static class Program
             Console.WriteLine("PadMicro 映射服务已启动。按 Ctrl+C 退出。");
             Console.WriteLine("仅在 Codex/ChatGPT 窗口位于前台时发送快捷键。\n");
             PrintMappings(profile);
-            Run(controller, profile, quit.Token);
+            Run(controller, profile, controllerFamily, quit.Token);
             SDL_GameControllerClose(controller);
             return 0;
         }
@@ -165,46 +188,87 @@ internal static class Program
         }
     }
 
-    private static IntPtr OpenGameController()
+    private static IntPtr OpenGameController(out string controllerName)
     {
-        for (var i = 0; i < SDL_NumJoysticks(); i++)
+        controllerName = "Unknown controller";
+        var count = SDL_NumJoysticks();
+        Console.WriteLine($"SDL 枚举到 {count} 个手柄设备：");
+        for (var i = 0; i < count; i++)
         {
+            var deviceName = Marshal.PtrToStringUTF8(SDL_JoystickNameForIndex(i)) ?? "Unknown controller";
+            Console.WriteLine($"  [{i}] {deviceName} · {(SDL_IsGameController(i) != 0 ? "标准控制器" : "仅原始摇杆")}");
             if (SDL_IsGameController(i) == 0) continue;
             var controller = SDL_GameControllerOpen(i);
             if (controller == IntPtr.Zero) continue;
             var name = Marshal.PtrToStringUTF8(SDL_GameControllerName(controller)) ?? "Unknown controller";
+            controllerName = name;
             Console.WriteLine($"检测到手柄：{name}");
+            Console.WriteLine($"PADMICRO_DEVICE|{name.Replace("\r", " ").Replace("\n", " ")}");
             return controller;
         }
         return IntPtr.Zero;
     }
 
-    private static void Run(IntPtr controller, Profile profile, CancellationToken token)
+    private static string DetectControllerFamily(string name)
+    {
+        if (name.Contains("Stadia", StringComparison.OrdinalIgnoreCase)) return "stadia";
+        if (name.Contains("Xbox", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("XInput", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("X-Box", StringComparison.OrdinalIgnoreCase)) return "xbox";
+        if (name.Contains("Nintendo", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("Switch", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("Joy-Con", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("Pro Controller", StringComparison.OrdinalIgnoreCase)) return "switch";
+        return "generic";
+    }
+
+    private static string ResolveControllerProfilePath(string requestedPath, string family)
+    {
+        if (family == "generic") return requestedPath;
+        var directory = Path.GetDirectoryName(requestedPath) ?? AppContext.BaseDirectory;
+        var fileName = Path.GetFileNameWithoutExtension(requestedPath);
+        if (fileName.EndsWith(".stadia", StringComparison.OrdinalIgnoreCase)
+            || fileName.EndsWith(".xbox", StringComparison.OrdinalIgnoreCase)
+            || fileName.EndsWith(".switch", StringComparison.OrdinalIgnoreCase))
+            return requestedPath;
+        var candidate = Path.Combine(directory, $"{fileName}.{family}.json");
+        return File.Exists(candidate) ? candidate : requestedPath;
+    }
+
+    private static void Run(IntPtr controller, Profile profile, string controllerFamily, CancellationToken token)
     {
         var previous = new Dictionary<int, bool>();
         var bindings = new Dictionary<int, ActionBinding>();
+        var bindingKeys = new Dictionary<int, string>();
         foreach (var item in profile.Buttons)
         {
-            var action = ResolveAction(item.Value, profile);
+            if (profile.DisabledBindings.Contains(item.Key)) continue;
+            var action = ResolveAction(item.Value, profile, item.Key);
             if (ButtonIds.TryGetValue(item.Key, out var buttonId) && action is not null)
+            {
                 bindings[buttonId] = action;
+                bindingKeys[buttonId] = item.Key;
+            }
         }
         var gestures = profile.Gestures
-            .Select(item => (item.Key, Action: ResolveAction(item.Value, profile)))
+            .Where(item => !profile.DisabledBindings.Contains(item.Key))
+            .Select(item => (item.Key, Action: ResolveAction(item.Value, profile, item.Key)))
             .Where(item => item.Action is not null)
             .ToDictionary(item => item.Key, item => item.Action!, StringComparer.OrdinalIgnoreCase);
         var activeHolds = new HashSet<int>();
         var pendingSingles = new Dictionary<int, DateTime>();
         var leftFlick = new FlickTracker("LeftStick");
         var rightFlick = new FlickTracker("RightStick");
-        ActionBinding? SpecialAction(string name) => profile.Buttons.TryGetValue(name, out var actionName)
-            ? ResolveAction(actionName, profile)
+        ActionBinding? SpecialAction(string name) => !profile.DisabledBindings.Contains(name)
+            && profile.Buttons.TryGetValue(name, out var actionName)
+            ? ResolveAction(actionName, profile, name)
             : null;
         var captureAction = SpecialAction("StadiaCapture");
         var assistantAction = SpecialAction("StadiaAssistant");
         var assistantHoldActive = false;
         void PressAssistant()
         {
+            Console.WriteLine("PADMICRO_INPUT|StadiaAssistant");
             if (assistantAction is null || !IsCodexForeground()) return;
             if (assistantAction.Hold && assistantAction.Chords is { Length: > 0 })
             {
@@ -222,10 +286,18 @@ internal static class Program
             assistantHoldActive = false;
             LogAction(assistantAction, "↑");
         }
-        using var specialButtons = StadiaSpecialButtonReader.TryStart(
-            () => ExecuteSpecialAction(captureAction, "Stadia Capture"),
-            PressAssistant,
-            ReleaseAssistant);
+        using var specialButtons = controllerFamily == "stadia"
+            ? StadiaSpecialButtonReader.TryStart(
+                () =>
+                {
+                    Console.WriteLine("PADMICRO_INPUT|StadiaCapture");
+                    ExecuteSpecialAction(captureAction, "Stadia Capture");
+                },
+                PressAssistant,
+                ReleaseAssistant)
+            : null;
+
+        Console.WriteLine("PADMICRO_READY");
 
         try
         {
@@ -238,6 +310,12 @@ internal static class Program
                     var wasPressed = previous.GetValueOrDefault(buttonId);
                     if (pressed != wasPressed)
                     {
+                        if (pressed)
+                        {
+                            Console.WriteLine($"PADMICRO_INPUT|{bindingKeys.GetValueOrDefault(buttonId, $"button:{buttonId}")}");
+                            if (!IsCodexForeground())
+                                Console.WriteLine($"PADMICRO_BLOCKED|{GetForegroundProcessName()}");
+                        }
                         if (action.Hold)
                         {
                             if (pressed && IsCodexForeground())
@@ -322,7 +400,13 @@ internal static class Program
         string? gesture,
         Dictionary<string, ActionBinding> gestures)
     {
-        if (gesture is null || !IsCodexForeground()) return;
+        if (gesture is null) return;
+        Console.WriteLine($"PADMICRO_INPUT|{gesture}");
+        if (!IsCodexForeground())
+        {
+            Console.WriteLine($"PADMICRO_BLOCKED|{GetForegroundProcessName()}");
+            return;
+        }
         if (!gestures.TryGetValue(gesture, out var action)) return;
         ExecuteAction(action);
         LogAction(action, gesture);
@@ -447,20 +531,28 @@ internal static class Program
         catch { return $"PID {pid}"; }
     }
 
-    private static ActionBinding? ResolveAction(string name, Profile profile)
+    private static ActionBinding? ResolveAction(string name, Profile profile, string? profileKey = null)
     {
         if (BuiltInActions.TryGetValue(name, out var action))
         {
-            if (!name.Equals("CyclePlanMode", StringComparison.OrdinalIgnoreCase)) return action;
-            if (!profile.CustomShortcuts.TryGetValue(name, out var shortcut)
-                || string.IsNullOrWhiteSpace(shortcut)) return action;
+            string? shortcut = null;
+            var hasShortcut = profileKey is not null
+                              && profile.CustomShortcuts.TryGetValue(profileKey, out shortcut);
+            if (!hasShortcut) hasShortcut = profile.CustomShortcuts.TryGetValue(name, out shortcut);
+            if (!hasShortcut || string.IsNullOrWhiteSpace(shortcut)) return action;
             if (TryParseShortcut(shortcut, out var chord))
                 return action with
                 {
-                    Label = "切换计划模式",
-                    Chords = new[] { chord }
+                    Label = name.Equals("CyclePlanMode", StringComparison.OrdinalIgnoreCase)
+                        ? "切换计划模式"
+                        : action.Label,
+                    Chords = new[] { chord },
+                    Uri = null,
+                    Text = null,
+                    Custom = null,
+                    DoubleChords = null
                 };
-            Console.Error.WriteLine($"计划模式快捷键格式无效：{shortcut}");
+            Console.Error.WriteLine($"{profileKey ?? name} 的快捷键格式无效：{shortcut}");
             return action;
         }
         const string workflowPrefix = "Workflow:";
@@ -489,7 +581,8 @@ internal static class Program
             hasPrimaryKey |= !modifier;
         }
         chord = keys.ToArray();
-        return hasPrimaryKey && chord.Length <= 4;
+        var standaloneRightAlt = chord.Length == 1 && chord[0] == 0xA5;
+        return (hasPrimaryKey || standaloneRightAlt) && chord.Length <= 4;
     }
 
     private static bool TryParseVirtualKey(string token, out int key, out bool modifier)
@@ -632,13 +725,23 @@ internal static class Program
     {
         foreach (var item in profile.Buttons)
         {
-            var action = ResolveAction(item.Value, profile);
+            if (profile.DisabledBindings.Contains(item.Key))
+            {
+                Console.WriteLine($"  {item.Key,-15} → 未绑定");
+                continue;
+            }
+            var action = ResolveAction(item.Value, profile, item.Key);
             if (action is not null)
                 Console.WriteLine($"  {item.Key,-15} → {action.Label}");
         }
         foreach (var item in profile.Gestures)
         {
-            var action = ResolveAction(item.Value, profile);
+            if (profile.DisabledBindings.Contains(item.Key))
+            {
+                Console.WriteLine($"  {item.Key,-15} → 未绑定");
+                continue;
+            }
+            var action = ResolveAction(item.Value, profile, item.Key);
             if (action is not null)
                 Console.WriteLine($"  {item.Key,-15} → {action.Label}");
         }
@@ -660,6 +763,7 @@ internal static class Program
         public Dictionary<string, string> Gestures { get; set; } = new();
         public Dictionary<string, string> Workflows { get; set; } = new();
         public Dictionary<string, string> CustomShortcuts { get; set; } = new();
+        public HashSet<string> DisabledBindings { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
     private sealed record DesktopTask(string Id, string Cwd, long Recency, string? Model);
@@ -1065,6 +1169,7 @@ internal static class Program
     [DllImport(SdlLibrary, CallingConvention = CallingConvention.Cdecl)] private static extern int SDL_Init(uint flags);
     [DllImport(SdlLibrary, CallingConvention = CallingConvention.Cdecl)] private static extern void SDL_Quit();
     [DllImport(SdlLibrary, CallingConvention = CallingConvention.Cdecl)] private static extern int SDL_NumJoysticks();
+    [DllImport(SdlLibrary, CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr SDL_JoystickNameForIndex(int deviceIndex);
     [DllImport(SdlLibrary, CallingConvention = CallingConvention.Cdecl)] private static extern int SDL_IsGameController(int index);
     [DllImport(SdlLibrary, CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr SDL_GameControllerOpen(int index);
     [DllImport(SdlLibrary, CallingConvention = CallingConvention.Cdecl)] private static extern void SDL_GameControllerClose(IntPtr controller);

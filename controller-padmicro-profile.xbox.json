@@ -4,11 +4,10 @@
     "East": "Cancel",
     "North": "TypelessToggle",
     "West": "SmartDelete",
-    "StadiaCapture": "ChooseProject",
-    "StadiaAssistant": "ForkChat",
-    "View": "QuickChat",
-    "Guide": "NewChat",
+    "View": "ForkChat",
     "Menu": "ChooseProject",
+    "Misc1": "QuickChat",
+    "Guide": "SystemReserved",
     "LeftShoulder": "PreviousChat",
     "RightShoulder": "NextChat",
     "LeftTrigger": "CyclePlanMode",
@@ -29,9 +28,5 @@
     "RightStickLeft": "ArrowLeft",
     "RightStickRight": "ArrowRight"
   },
-  "customShortcuts": {},
-  "disabledBindings": [
-    "StadiaCapture",
-    "Guide"
-  ]
+  "customShortcuts": {}
 }

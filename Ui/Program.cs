@@ -14,7 +14,7 @@ internal static class Program
         var exportIndex = Array.FindIndex(args, arg => arg.Equals("--export", StringComparison.OrdinalIgnoreCase));
         if (exportIndex >= 0 && exportIndex + 1 < args.Length)
         {
-            using var form = new MainForm(autoStart: false);
+            using var form = new MainForm(autoStart: false, startHidden: false);
             form.CreateControl();
             form.PerformLayout();
             form.ExportImage(Path.GetFullPath(args[exportIndex + 1]));
@@ -28,7 +28,8 @@ internal static class Program
             return;
         }
 
-        Application.Run(new MainForm(autoStart: true));
+        var startHidden = args.Any(arg => arg.Equals("--background", StringComparison.OrdinalIgnoreCase));
+        Application.Run(new MainForm(autoStart: true, startHidden));
     }
 
     private static void RequestExistingInstanceActivation()
