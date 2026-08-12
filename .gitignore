@@ -3,9 +3,7 @@ obj/
 Ui/bin/
 Ui/obj/
 publish/
-publish-next/
 installer/output/
-Ui/Web/controller-xbox-series.png
-Ui/Web/controller-xbox-series-white-chroma.png
+publish-next/
 *.user
 *.log
